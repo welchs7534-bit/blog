@@ -39,8 +39,8 @@ def upload_post(post_data, image_data=None):
         print(f"로그인 후 현재 URL: {driver.current_url}")
         _write_post(driver, wait, post_data, image_data)
         print(f"포스팅 완료: {post_data['title']}")
+        input("\n브라우저 확인 후 엔터를 누르면 종료됩니다...")
     finally:
-        time.sleep(2)
         driver.quit()
 
 
@@ -146,17 +146,29 @@ def _write_post(driver, wait, post_data, image_data):
     def clean(text):
         return "".join(c for c in text if ord(c) <= 0xFFFF)
 
-    # 제목 입력 - JavaScript로 직접 설정
-    driver.execute_script("""
-        var el = document.querySelector('#post-title-inp');
-        if(el) {
-            el.focus();
-            el.value = arguments[0];
-            el.dispatchEvent(new Event('input', {bubbles:true}));
-            el.dispatchEvent(new Event('change', {bubbles:true}));
-        }
-    """, clean(post_data["title"]))
-    time.sleep(1)
+    # 제목 입력 - input 또는 contenteditable 모두 처리
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
+
+    title_el = None
+    for sel in ["#post-title-inp", ".tit-post", "[placeholder*='제목']"]:
+        try:
+            title_el = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+            )
+            break
+        except Exception:
+            continue
+
+    if title_el:
+        title_el.click()
+        time.sleep(0.5)
+        # 전체 선택 후 지우기
+        title_el.send_keys(Keys.CONTROL + "a")
+        title_el.send_keys(Keys.DELETE)
+        time.sleep(0.3)
+        title_el.send_keys(clean(post_data["title"]))
+        time.sleep(0.5)
     print("  제목 입력 완료")
 
     # 본문 내용 준비
@@ -165,27 +177,57 @@ def _write_post(driver, wait, post_data, image_data):
         content += f'\n\n사진: {clean(image_data["photographer"])} on Unsplash'
     content_html = content.replace("\n", "<br>")
 
-    # 본문 입력 - 새 티스토리 에디터 (contenteditable div)
-    driver.execute_script("""
-        // 새 에디터 (contenteditable)
-        var editors = document.querySelectorAll('[contenteditable=true]');
-        for(var i=0; i<editors.length; i++){
-            var el = editors[i];
-            if(el.className && (el.className.includes('ProseMirror') ||
-               el.className.includes('editor') || el.className.includes('content'))) {
-                el.focus();
-                el.innerHTML = arguments[0];
-                el.dispatchEvent(new Event('input', {bubbles:true}));
-                break;
-            }
-        }
-        // TinyMCE 폴백
+    # 본문 입력 - TinyMCE setContent API 사용
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
+
+    # 메인 문서에서 tinyMCE API 호출
+    inserted = driver.execute_script("""
         if(typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor) {
             tinyMCE.activeEditor.setContent(arguments[0]);
+            tinyMCE.activeEditor.save();
+            return 'tinyMCE.setContent 성공';
         }
+        if(typeof tinymce !== 'undefined' && tinymce.activeEditor) {
+            tinymce.activeEditor.setContent(arguments[0]);
+            tinymce.activeEditor.save();
+            return 'tinymce.setContent 성공';
+        }
+        return 'tinyMCE 없음';
     """, content_html)
+
+    if "없음" in str(inserted):
+        # iframe 안에서 시도
+        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        for iframe in iframes:
+            try:
+                driver.switch_to.frame(iframe)
+                result = driver.execute_script("""
+                    if(typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor) {
+                        tinyMCE.activeEditor.setContent(arguments[0]);
+                        return 'iframe tinyMCE 성공';
+                    }
+                    var el = document.getElementById('tinymce');
+                    if(el) {
+                        el.focus();
+                        document.execCommand('selectAll', false, null);
+                        document.execCommand('insertText', false, arguments[1]);
+                        return 'iframe execCommand 성공';
+                    }
+                    return null;
+                """, content_html, content)
+                driver.switch_to.default_content()
+                if result:
+                    inserted = result
+                    break
+            except Exception:
+                try:
+                    driver.switch_to.default_content()
+                except Exception:
+                    pass
+
     time.sleep(1)
-    print("  본문 입력 완료")
+    print(f"  본문 입력 완료: {inserted}")
 
     # 태그 입력
     if post_data.get("tags"):
@@ -201,37 +243,66 @@ def _write_post(driver, wait, post_data, image_data):
                 continue
         time.sleep(1)
 
-    # 발행(완료) 버튼 클릭
-    for sel, by in [
-        (".btn_complete", By.CSS_SELECTOR),
-        (".btn-publish", By.CSS_SELECTOR),
-        (".btn_publish", By.CSS_SELECTOR),
-        ("//button[contains(text(),'완료')]", By.XPATH),
-        ("//button[contains(text(),'발행')]", By.XPATH),
-    ]:
-        try:
-            btn = driver.find_element(by, sel)
-            btn.click()
-            print("  발행 버튼 클릭")
-            break
-        except Exception:
-            continue
+    # 완료 버튼 클릭 (JavaScript로 텍스트 기반 클릭)
+    clicked = driver.execute_script("""
+        var btns = document.querySelectorAll('button');
+        for(var i=0; i<btns.length; i++){
+            var t = btns[i].innerText.trim();
+            if(t === '완료' || t === '발행' || t === '저장') {
+                btns[i].click();
+                return btns[i].innerText.trim();
+            }
+        }
+        return null;
+    """)
+    print(f"  완료 버튼 클릭: {clicked}")
+    time.sleep(4)
+
     time.sleep(2)
 
-    # 발행 확인 팝업이 뜨면 확인 클릭
-    try:
-        for sel, by in [
-            (".btn-publishing", By.CSS_SELECTOR),
-            ("//button[contains(text(),'공개')]", By.XPATH),
-            ("//button[contains(text(),'발행')]", By.XPATH),
-        ]:
-            try:
-                confirm_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((by, sel)))
-                confirm_btn.click()
-                print("  발행 확인 완료")
-                break
-            except Exception:
-                continue
-    except Exception:
-        pass
-    time.sleep(3)
+    # "공개" 라디오 버튼 클릭 (label 텍스트가 정확히 "공개"인 것)
+    driver.execute_script("""
+        var labels = document.querySelectorAll('label');
+        for(var i=0; i<labels.length; i++){
+            if(labels[i].innerText.trim() === '공개') {
+                labels[i].click();
+                return;
+            }
+        }
+        // label 안의 input[type=radio] 직접 클릭
+        var radios = document.querySelectorAll('input[type=radio]');
+        if(radios.length > 0) radios[0].click();
+    """)
+    time.sleep(1)
+    print("  공개 설정 완료")
+
+    # 버튼 텍스트 확인 후 클릭 (비공개 저장 → 발행 으로 바뀌었는지)
+    clicked2 = driver.execute_script("""
+        var btns = document.querySelectorAll('button');
+        var all = [];
+        for(var i=0; i<btns.length; i++){
+            var t = btns[i].innerText.trim();
+            if(btns[i].offsetParent !== null && t) all.push(t);
+        }
+        // 비공개 저장이 아닌 저장/발행 버튼 클릭
+        for(var i=0; i<btns.length; i++){
+            var t = btns[i].innerText.trim();
+            if(btns[i].offsetParent !== null &&
+               (t === '발행' || t === '저장' || t === '공개 저장' || t === '공개 발행') &&
+               t !== '비공개 저장') {
+                btns[i].click();
+                return '클릭: ' + t;
+            }
+        }
+        // 그래도 없으면 비공개 저장이라도 클릭
+        for(var i=0; i<btns.length; i++){
+            var t = btns[i].innerText.trim();
+            if(btns[i].offsetParent !== null && t.includes('저장')) {
+                btns[i].click();
+                return '클릭(폴백): ' + t;
+            }
+        }
+        return 'NOTFOUND: ' + all.join('|');
+    """)
+    print(f"  발행 버튼: {clicked2}")
+    time.sleep(4)
