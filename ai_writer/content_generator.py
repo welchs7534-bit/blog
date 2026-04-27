@@ -1,12 +1,14 @@
 import os
+import re
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-SYSTEM_PROMPT = """너는 블로그 포스팅 작성 전문가야.
-반드시 아래 형식으로만 답해야 해. 다른 말은 절대 붙이지 마:
+SYSTEM_PROMPT = """너는 한국어 블로그 포스팅 작성 전문가야.
+반드시 아래 형식으로만 답해야 해. 다른 말은 절대 붙이지 마.
+한자, 일본어, 중국어 문자를 절대 사용하지 마. 오직 순수한 한국어(한글, 영어, 숫자, 기본 문장부호)만 사용해.
 
 [제목]: 여기에 제목
 [본문]: 여기에 본문
@@ -17,16 +19,17 @@ def generate_post(news_data):
     title = news_data["title"]
     content = news_data["content"]
 
-    prompt = f"""아래 뉴스를 블로그용으로 새롭게 재작성해줘.
+    prompt = f"""아래 뉴스를 한국어 블로그용으로 새롭게 재작성해줘.
 
 원본 제목: {title}
 원본 내용: {content[:2000]}
 
 조건:
 - 원문 그대로 복사 금지, 완전히 새로 작성
-- 친근하고 읽기 쉬운 말투
+- 친근하고 읽기 쉬운 한국어 말투
 - 800자 이상
 - 단락 구분
+- 한자, 중국어, 일본어 문자 절대 사용 금지. 한글과 영어만 사용할 것
 
 반드시 이 형식으로만 답해:
 [제목]: 새로운 제목
@@ -41,7 +44,16 @@ def generate_post(news_data):
         ],
         temperature=0.7,
     )
-    return _parse_response(response.choices[0].message.content)
+    result = _parse_response(response.choices[0].message.content)
+
+    # 한자/중국어/일본어 문자 제거 (CJK 통합 한자 범위)
+    def remove_cjk(text):
+        return re.sub(r'[一-鿿぀-ゟ゠-ヿ]', '', text)
+
+    result["title"] = remove_cjk(result["title"])
+    result["body"] = remove_cjk(result["body"])
+
+    return result
 
 
 def _parse_response(text):
@@ -67,7 +79,6 @@ def _parse_response(text):
 
     result["body"] = "\n".join(body_lines).strip()
 
-    # 파싱 실패 시 전체를 본문으로 처리
     if not result["title"] and not result["body"]:
         lines = text.strip().split("\n")
         result["title"] = lines[0][:60] if lines else "제목 없음"

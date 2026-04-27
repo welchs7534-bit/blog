@@ -171,11 +171,17 @@ def _write_post(driver, wait, post_data, image_data):
         time.sleep(0.5)
     print("  제목 입력 완료")
 
-    # 본문 내용 준비
+    # 본문 내용 준비 (이미지 HTML 포함)
     content = clean(post_data["body"])
     if image_data:
-        content += f'\n\n사진: {clean(image_data["photographer"])} on Unsplash'
-    content_html = content.replace("\n", "<br>")
+        img_html = (
+            f'<p><img src="{image_data["url"]}" style="max-width:100%;" '
+            f'alt="{clean(image_data["photographer"])}"/></p>'
+            f'<p style="font-size:12px;color:#888;">사진: {clean(image_data["photographer"])} on Unsplash</p>'
+        )
+        content_html = content.replace("\n", "<br>") + "<br><br>" + img_html
+    else:
+        content_html = content.replace("\n", "<br>")
 
     # 본문 입력 - TinyMCE setContent API 사용
     from selenium.webdriver.common.action_chains import ActionChains
