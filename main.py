@@ -35,7 +35,7 @@ def main():
     print("잠시 후 브라우저가 자동으로 열립니다...")
     upload_post(post_data, image_data)
 
-    print("\n✅ 포스팅이 완료되었습니다!")
+    print("\n포스팅이 완료되었습니다!")
     print("=" * 50)
 
 

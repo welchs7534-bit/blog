@@ -1,18 +1,16 @@
 import os
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 def generate_post(news_data):
     title = news_data["title"]
     content = news_data["content"]
 
-    prompt = f"""
-아래 뉴스 기사를 블로그 포스팅용으로 새롭게 작성해줘.
+    prompt = f"""아래 뉴스 기사를 블로그 포스팅용으로 새롭게 작성해줘.
 
 [원본 제목]
 {title}
@@ -26,16 +24,19 @@ def generate_post(news_data):
 - 800자 이상 작성
 - 블로그 포스팅 형식으로 단락 구분
 - 제목은 SEO에 유리하게 새로 만들기
-- 마지막에 핵심 키워드 5개를 쉼표로 구분해서 [태그: 키워드1, 키워드2, ...]형식으로 추가
+- 마지막에 핵심 키워드 5개를 쉼표로 구분해서 [태그] 형식으로 추가
 
 결과물 형식:
 [제목]: 새로운 제목
 [본문]: 본문 내용
-[태그]: 태그1, 태그2, 태그3, 태그4, 태그5
-"""
+[태그]: 태그1, 태그2, 태그3, 태그4, 태그5"""
 
-    response = model.generate_content(prompt)
-    return _parse_response(response.text)
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+    )
+    return _parse_response(response.choices[0].message.content)
 
 
 def _parse_response(text):
