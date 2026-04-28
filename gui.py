@@ -146,7 +146,7 @@ class BlogApp(tk.Tk):
                 c.create_oval(700-r, 600-r, 700+r, 600+r,
                               fill=col, outline="")
             except: pass
-        c.lower()
+        c.tag_lower("all")
 
     def _build_center(self):
         outer = tk.Frame(self, bg=BG)
