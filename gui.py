@@ -124,8 +124,10 @@ class BlogApp(tk.Tk):
     # ── UI 구성 ──────────────────────────────
 
     def _build_ui(self):
+        self._pages = {}
         self._build_header()
         self._build_tabs()
+        self._switch_tab(0)
 
     def _build_header(self):
         h = tk.Frame(self, bg=C["header_bg"], height=80)
@@ -157,7 +159,6 @@ class BlogApp(tk.Tk):
                           command=lambda i=idx: self._switch_tab(i))
             b.pack(side="left", ipady=8, ipadx=6)
             self._tab_btns[idx] = b
-        self._switch_tab(0)
 
     def _build_tabs(self):
         self._pages = {}
