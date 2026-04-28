@@ -1,6 +1,8 @@
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
-import threading, os, sys
+from tkinter import ttk, scrolledtext, messagebox
+import threading
+import os
+import sys
 from pathlib import Path
 
 
@@ -9,28 +11,38 @@ def get_base_dir():
         return Path(sys.executable).parent
     return Path(__file__).parent
 
+
 BASE_DIR = get_base_dir()
 ENV_FILE = BASE_DIR / ".env"
 
-BG       = "#070b18"
-BG2      = "#0d1226"
-ACCENT   = "#1a8fff"
-ACCENT_H = "#0e6dd4"
-TEXT     = "#ffffff"
-TEXT2    = "#6a7fa8"
-LINE     = "#1e2d4a"
-LINE_ACT = "#1a8fff"
-SUCCESS  = "#00c896"
-WARN     = "#e0af68"
-ERR      = "#f7768e"
-INFO     = "#7dcfff"
+# ── 색상 팔레트 ──────────────────────────────
+C = {
+    "bg":         "#f0f2f5",
+    "card":       "#ffffff",
+    "header_bg":  "#1e1e2e",
+    "header_sub": "#a0a0c0",
+    "accent":     "#7c6ff7",
+    "accent_h":   "#6459e0",
+    "success":    "#00b894",
+    "success_h":  "#00a381",
+    "danger":     "#d63031",
+    "text":       "#2d3436",
+    "text2":      "#636e72",
+    "border":     "#dfe6e9",
+    "log_bg":     "#1a1b26",
+    "log_fg":     "#c0caf5",
+    "log_ok":     "#9ece6a",
+    "log_err":    "#f7768e",
+    "log_info":   "#7dcfff",
+    "log_warn":   "#e0af68",
+}
 
-F_LOGO  = ("맑은 고딕", 20, "bold")
-F_SUB   = ("맑은 고딕",  9)
-F_LABEL = ("맑은 고딕",  8)
-F_INPUT = ("맑은 고딕", 12)
-F_BTN   = ("맑은 고딕", 11, "bold")
-F_LOG   = ("Consolas",   9)
+FONT_TITLE  = ("맑은 고딕", 18, "bold")
+FONT_SUB    = ("맑은 고딕",  9)
+FONT_LABEL  = ("맑은 고딕", 10, "bold")
+FONT_BODY   = ("맑은 고딕", 10)
+FONT_BTN    = ("맑은 고딕", 11, "bold")
+FONT_LOG    = ("Consolas",   9)
 
 
 def load_settings():
@@ -39,272 +51,275 @@ def load_settings():
     if ENV_FILE.exists():
         for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.startswith("#"):
-                k,v = line.split("=",1)
-                if k.strip() in s: s[k.strip()] = v.strip()
+                k, v = line.split("=", 1)
+                if k.strip() in s:
+                    s[k.strip()] = v.strip()
     return s
 
+
 def save_settings(s):
-    ENV_FILE.write_text("\n".join(f"{k}={v}" for k,v in s.items()), encoding="utf-8")
+    lines = [f"{k}={v}" for k, v in s.items()]
+    ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
-class UnderlineEntry(tk.Frame):
-    """밑줄 스타일 입력창"""
-    def __init__(self, parent, label="", show="", bg=BG2, **kw):
-        super().__init__(parent, bg=bg)
-        self._bg = bg
-        tk.Label(self, text=label, font=F_LABEL, fg=ACCENT, bg=bg).pack(anchor="w")
+# ── 커스텀 위젯 헬퍼 ─────────────────────────
+
+def card(parent, **kw):
+    f = tk.Frame(parent, bg=C["card"], bd=0, highlightthickness=1,
+                 highlightbackground=C["border"], **kw)
+    return f
+
+
+def label(parent, text, font=FONT_BODY, fg=None, bg=None, **kw):
+    return tk.Label(parent, text=text, font=font,
+                    fg=fg or C["text"], bg=bg or C["card"], **kw)
+
+
+def hover_btn(parent, text, cmd, bg, hover, fg="white", font=FONT_BTN, **kw):
+    b = tk.Button(parent, text=text, command=cmd, font=font,
+                  bg=bg, fg=fg, activebackground=hover, activeforeground=fg,
+                  relief="flat", bd=0, cursor="hand2", **kw)
+    b.bind("<Enter>", lambda e: b.config(bg=hover))
+    b.bind("<Leave>", lambda e: b.config(bg=bg))
+    return b
+
+
+class RoundEntry(tk.Frame):
+    """Entry with colored left border accent."""
+    def __init__(self, parent, show="", **kw):
+        super().__init__(parent, bg=C["card"], bd=0,
+                         highlightthickness=1, highlightbackground=C["border"])
+        self._accent = tk.Frame(self, bg=C["accent"], width=4)
+        self._accent.pack(side="left", fill="y")
         self._var = tk.StringVar()
-        self._e = tk.Entry(self, textvariable=self._var, show=show,
-                           font=F_INPUT, bd=0, relief="flat",
-                           bg=bg, fg=TEXT, insertbackground=TEXT,
-                           highlightthickness=0, **kw)
-        self._e.pack(fill="x", pady=(4, 4))
-        self._line = tk.Frame(self, bg=LINE, height=2)
-        self._line.pack(fill="x")
-        self._e.bind("<FocusIn>",  lambda e: self._line.config(bg=LINE_ACT))
-        self._e.bind("<FocusOut>", lambda e: self._line.config(bg=LINE))
+        self._entry = tk.Entry(self, textvariable=self._var, show=show,
+                               font=FONT_BODY, bd=0, relief="flat",
+                               bg=C["card"], fg=C["text"],
+                               insertbackground=C["text"], **kw)
+        self._entry.pack(side="left", fill="both", expand=True,
+                         padx=(8, 8), pady=6)
+        self.bind("<FocusIn>",  lambda e: self.config(highlightbackground=C["accent"]))
+        self.bind("<FocusOut>", lambda e: self.config(highlightbackground=C["border"]))
+        self._entry.bind("<FocusIn>",  lambda e: self.config(highlightbackground=C["accent"]))
+        self._entry.bind("<FocusOut>", lambda e: self.config(highlightbackground=C["border"]))
 
     def get(self): return self._var.get()
     def set(self, v): self._var.set(v)
-    def focus(self): self._e.focus()
-
-
-class GlowButton(tk.Canvas):
-    """파란 글로우 버튼"""
-    def __init__(self, parent, text, cmd, width=380, height=46,
-                 color=ACCENT, hover=ACCENT_H, **kw):
-        super().__init__(parent, width=width, height=height,
-                         bd=0, highlightthickness=0, bg=BG2, **kw)
-        self._text = text
-        self._cmd  = cmd
-        self._c    = color
-        self._h    = hover
-        self._draw(color)
-        self.bind("<Enter>",          lambda e: self._draw(hover))
-        self.bind("<Leave>",          lambda e: self._draw(color))
-        self.bind("<ButtonRelease-1>", lambda e: cmd())
-        self.config(cursor="hand2")
-
-    def _draw(self, color):
-        self.delete("all")
-        r = 8
-        w, h = int(self["width"]), int(self["height"])
-        self.create_rounded_rect(0, 0, w, h, r, fill=color, outline="")
-        self.create_text(w//2, h//2, text=self._text,
-                         font=F_BTN, fill=TEXT)
-
-    def create_rounded_rect(self, x1, y1, x2, y2, r, **kw):
-        pts = [x1+r,y1, x2-r,y1, x2,y1, x2,y1+r,
-               x2,y2-r, x2,y2, x2-r,y2, x1+r,y2,
-               x1,y2, x1,y2-r, x1,y1+r, x1,y1]
-        return self.create_polygon(pts, smooth=True, **kw)
-
-    def set_state(self, text, color=None):
-        self._text = text
-        self._draw(color or self._c)
 
 
 class BlogApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("블로그 자동 포스팅")
-        self.geometry("760x640")
+        self.geometry("660x680")
         self.resizable(False, False)
-        self.configure(bg=BG)
-        try: self.iconbitmap(BASE_DIR/"icon.ico")
-        except: pass
+        self.configure(bg=C["bg"])
+        try:
+            self.iconbitmap(BASE_DIR / "icon.ico")
+        except Exception:
+            pass
+        self._build_ui()
+        self._load_settings()
 
+    # ── UI 구성 ──────────────────────────────
+
+    def _build_ui(self):
         self._pages = {}
-        self._build()
-        self._load()
+        self._build_header()
+        self._build_tabs()
+        self._switch_tab(0)
 
-    # ─── 빌드 ────────────────────────────────
+    def _build_header(self):
+        h = tk.Frame(self, bg=C["header_bg"], height=80)
+        h.pack(fill="x")
+        h.pack_propagate(False)
 
-    def _build(self):
-        self._draw_bg()
-        self._build_center()
+        inner = tk.Frame(h, bg=C["header_bg"])
+        inner.place(relx=.5, rely=.5, anchor="center")
 
-    def _draw_bg(self):
-        """오로라 느낌 배경"""
-        c = tk.Canvas(self, width=760, height=640,
-                      bd=0, highlightthickness=0, bg=BG)
-        c.place(x=0, y=0)
-        # 왼쪽 상단 오로라 포인트 (청록)
-        for i, alpha in enumerate(range(80, 0, -8)):
-            r = 180 + i*18
-            x, y = -20, -20
-            col = f"#{0:02x}{max(0,20-i):02x}{max(0,40-i*2):02x}"
-            try:
-                c.create_oval(x-r, y-r, x+r, y+r,
-                              fill=col, outline="")
-            except: pass
-        # 오른쪽 하단 포인트 (파랑)
-        for i in range(6):
-            r = 160 + i*20
-            col = f"#{0:02x}{0:02x}{max(0,35-i*4):02x}"
-            try:
-                c.create_oval(700-r, 600-r, 700+r, 600+r,
-                              fill=col, outline="")
-            except: pass
-        c.tag_lower("all")
-
-    def _build_center(self):
-        outer = tk.Frame(self, bg=BG)
-        outer.place(relx=.5, rely=.5, anchor="center")
-
-        # 반투명 카드 효과 (약간 밝은 배경)
-        card = tk.Frame(outer, bg=BG2, bd=0,
-                        highlightthickness=1,
-                        highlightbackground="#1a2a4a")
-        card.pack(padx=0, pady=0)
-        inner = tk.Frame(card, bg=BG2)
-        inner.pack(padx=50, pady=40)
-
-        # 로고
         tk.Label(inner, text="블로그 자동 포스팅",
-                 font=F_LOGO, fg=TEXT, bg=BG2).pack()
-        tk.Label(inner, text="AI가 뉴스를 읽고 티스토리에 자동으로 발행합니다",
-                 font=F_SUB, fg=TEXT2, bg=BG2).pack(pady=(4, 28))
+                 font=("맑은 고딕", 17, "bold"),
+                 fg="white", bg=C["header_bg"]).pack()
+        tk.Label(inner, text="뉴스 URL 하나로 티스토리 자동 발행",
+                 font=FONT_SUB, fg=C["header_sub"],
+                 bg=C["header_bg"]).pack()
 
-        # 탭 버튼
-        tab_row = tk.Frame(inner, bg=BG2)
-        tab_row.pack(fill="x", pady=(0, 24))
+        # 탭 버튼 바
+        tab_bar = tk.Frame(self, bg=C["header_bg"], height=40)
+        tab_bar.pack(fill="x")
+        tab_bar.pack_propagate(False)
+
         self._tab_btns = {}
-        for lbl, idx in [("포스팅", 0), ("설정", 1)]:
-            b = tk.Button(tab_row, text=lbl, font=("맑은 고딕", 10),
+        for name, idx in [("  포스팅  ", 0), ("  설정  ", 1)]:
+            b = tk.Button(tab_bar, text=name, font=("맑은 고딕", 10),
                           bd=0, relief="flat", cursor="hand2",
-                          fg=TEXT2, bg=BG2,
-                          activeforeground=TEXT,
-                          activebackground=BG2,
-                          padx=18, pady=6,
-                          command=lambda i=idx: self._tab(i))
-            b.pack(side="left")
+                          fg="white", bg=C["header_bg"],
+                          activeforeground="white",
+                          activebackground=C["accent"],
+                          command=lambda i=idx: self._switch_tab(i))
+            b.pack(side="left", ipady=8, ipadx=6)
             self._tab_btns[idx] = b
 
-        # 페이지 컨테이너
-        self._cont = tk.Frame(inner, bg=BG2, width=460)
-        self._cont.pack(fill="both")
-        self._cont.pack_propagate(False)
+    def _build_tabs(self):
+        self._pages = {}
+        container = tk.Frame(self, bg=C["bg"])
+        container.pack(fill="both", expand=True)
 
-        self._make_post(self._cont)
-        self._make_settings(self._cont)
-        self._tab(0)
+        for i, builder in enumerate([self._page_post, self._page_settings]):
+            f = tk.Frame(container, bg=C["bg"])
+            f.place(relwidth=1, relheight=1)
+            builder(f)
+            self._pages[i] = f
 
-    def _make_post(self, parent):
-        f = tk.Frame(parent, bg=BG2)
-        self._pages[0] = f
+    def _switch_tab(self, idx):
+        for i, f in self._pages.items():
+            f.lift() if i == idx else f.lower()
+        for i, b in self._tab_btns.items():
+            b.config(bg=C["accent"] if i == idx else C["header_bg"])
 
-        self._url_e = UnderlineEntry(f, label="뉴스 URL", bg=BG2)
-        self._url_e.pack(fill="x", pady=(0, 28))
+    # ── 포스팅 탭 ────────────────────────────
 
-        self._btn = GlowButton(f, "포스팅 시작", self._start, width=460)
-        self._btn.pack(pady=(0, 20))
+    def _page_post(self, parent):
+        wrap = tk.Frame(parent, bg=C["bg"])
+        wrap.pack(fill="both", expand=True, padx=20, pady=16)
 
-        # 로그
-        log_frame = tk.Frame(f, bg=BG2, highlightthickness=1,
-                             highlightbackground=LINE)
-        log_frame.pack(fill="both")
-        top = tk.Frame(log_frame, bg=BG2)
-        top.pack(fill="x", padx=8, pady=(6,4))
-        tk.Label(top, text="진행 상황", font=("맑은 고딕", 8, "bold"),
-                 fg=TEXT2, bg=BG2).pack(side="left")
-        tk.Button(top, text="지우기", font=("맑은 고딕", 7),
-                  bd=0, relief="flat", cursor="hand2",
-                  fg=TEXT2, bg=BG2, command=self._clear).pack(side="right")
+        # URL 입력 카드
+        c1 = card(wrap)
+        c1.pack(fill="x", pady=(0, 12))
+        inner = tk.Frame(c1, bg=C["card"])
+        inner.pack(fill="x", padx=16, pady=14)
+
+        label(inner, "뉴스 URL", FONT_LABEL).pack(anchor="w")
+        label(inner, "네이버·다음 등 뉴스 기사 주소를 붙여넣으세요",
+              FONT_SUB, fg=C["text2"]).pack(anchor="w", pady=(2, 8))
+
+        self._url_entry = RoundEntry(inner)
+        self._url_entry.pack(fill="x")
+
+        # 시작 버튼
+        self._start_btn = hover_btn(
+            wrap, "  포스팅 시작  ", self._start,
+            C["success"], C["success_h"],
+            pady=12
+        )
+        self._start_btn.pack(fill="x", pady=(0, 12))
+
+        # 진행 상황 카드
+        c2 = card(wrap)
+        c2.pack(fill="both", expand=True)
+        top = tk.Frame(c2, bg=C["card"])
+        top.pack(fill="x", padx=16, pady=(12, 6))
+        label(top, "진행 상황", FONT_LABEL).pack(side="left")
+        hover_btn(top, "지우기", self._clear_log,
+                  C["border"], C["text2"], fg=C["text2"],
+                  font=("맑은 고딕", 8), pady=2, padx=6).pack(side="right")
 
         self._log = scrolledtext.ScrolledText(
-            log_frame, height=10, font=F_LOG,
-            state="disabled", bg="#0a0e1c", fg=INFO,
-            relief="flat", bd=0, padx=10, pady=6)
-        self._log.pack(fill="both", padx=1, pady=(0,1))
-        for tag, col in [("ok",SUCCESS),("err",ERR),
-                         ("warn",WARN),("info",INFO)]:
+            c2, font=FONT_LOG, state="disabled",
+            bg=C["log_bg"], fg=C["log_fg"],
+            selectbackground=C["accent"],
+            relief="flat", bd=0, padx=10, pady=8,
+            insertbackground=C["log_fg"]
+        )
+        self._log.pack(fill="both", expand=True, padx=1, pady=(0, 1))
+
+        # 로그 색상 태그
+        for tag, col in [("ok", C["log_ok"]), ("err", C["log_err"]),
+                         ("info", C["log_info"]), ("warn", C["log_warn"])]:
             self._log.tag_config(tag, foreground=col)
 
-    def _make_settings(self, parent):
-        f = tk.Frame(parent, bg=BG2)
-        self._pages[1] = f
+    # ── 설정 탭 ──────────────────────────────
 
-        fields = [
-            ("GROQ API 키",      "GROQ_API_KEY",        False),
-            ("Unsplash Key",     "UNSPLASH_ACCESS_KEY", False),
-            ("티스토리 이메일",  "TISTORY_ID",          False),
-            ("티스토리 비밀번호","TISTORY_PW",           True),
-            ("블로그 주소",      "TISTORY_BLOG_NAME",   False),
+    def _page_settings(self, parent):
+        wrap = tk.Frame(parent, bg=C["bg"])
+        wrap.pack(fill="both", expand=True, padx=20, pady=16)
+
+        sections = [
+            ("AI 설정", [
+                ("Groq API 키", "GROQ_API_KEY", False,
+                 "console.groq.com 에서 무료 발급"),
+                ("Unsplash Access Key", "UNSPLASH_ACCESS_KEY", False,
+                 "unsplash.com/developers 에서 무료 발급"),
+            ]),
+            ("티스토리 계정", [
+                ("이메일 (카카오 계정)", "TISTORY_ID", False, ""),
+                ("비밀번호",            "TISTORY_PW", True,  ""),
+                ("블로그 주소",         "TISTORY_BLOG_NAME", False,
+                 "예: myblog  →  myblog.tistory.com"),
+            ]),
         ]
+
         self._sv = {}
-        for lbl, key, pw in fields:
-            e = UnderlineEntry(f, label=lbl, show="*" if pw else "", bg=BG2)
-            e.pack(fill="x", pady=(0, 16))
-            self._sv[key] = e
+        for section_title, fields in sections:
+            # 섹션 헤더
+            tk.Label(wrap, text=section_title, font=("맑은 고딕", 10, "bold"),
+                     fg=C["accent"], bg=C["bg"]).pack(anchor="w", pady=(8, 4))
 
-        GlowButton(f, "설정 저장", self._save, width=460,
-                   color=SUCCESS, hover="#00a87e").pack(pady=(4,0))
+            c = card(wrap)
+            c.pack(fill="x", pady=(0, 6))
+            inner = tk.Frame(c, bg=C["card"])
+            inner.pack(fill="x", padx=16, pady=12)
 
-    # ─── 탭 전환 ─────────────────────────────
+            for i, (lbl, key, pw, hint) in enumerate(fields):
+                if i > 0:
+                    tk.Frame(inner, bg=C["border"], height=1).pack(fill="x", pady=8)
+                row = tk.Frame(inner, bg=C["card"])
+                row.pack(fill="x")
+                label(row, lbl, FONT_LABEL, bg=C["card"]).pack(anchor="w")
+                if hint:
+                    label(row, hint, FONT_SUB, fg=C["text2"],
+                          bg=C["card"]).pack(anchor="w", pady=(1, 4))
+                e = RoundEntry(row, show="*" if pw else "")
+                e.pack(fill="x", pady=(2, 0))
+                self._sv[key] = e
 
-    def _tab(self, idx):
-        for i, p in self._pages.items():
-            if i == idx: p.pack(fill="both")
-            else:        p.pack_forget()
-        for i, b in self._tab_btns.items():
-            if i == idx:
-                b.config(fg=ACCENT,
-                         font=("맑은 고딕", 10, "bold"))
-            else:
-                b.config(fg=TEXT2,
-                         font=("맑은 고딕", 10))
-        # 탭 아래 강조선
-        try: self._tab_line.destroy()
-        except: pass
-        b = self._tab_btns[idx]
-        self._tab_line = tk.Frame(b.master, bg=ACCENT, height=2)
-        self._tab_line.place(in_=b, relx=0, rely=1,
-                             relwidth=1, anchor="nw")
+        hover_btn(
+            wrap, "  설정 저장  ", self._save_settings,
+            C["accent"], C["accent_h"], pady=11
+        ).pack(fill="x", pady=(12, 0))
 
-    # ─── 설정 ────────────────────────────────
+    # ── 로직 ─────────────────────────────────
 
-    def _load(self):
+    def _load_settings(self):
         s = load_settings()
         for k, e in self._sv.items():
-            e.set(s.get(k,""))
+            e.set(s.get(k, ""))
 
-    def _save(self):
+    def _save_settings(self):
         s = {k: e.get().strip() for k, e in self._sv.items()}
         save_settings(s)
-        messagebox.showinfo("저장", "설정이 저장되었습니다.")
+        messagebox.showinfo("저장 완료", "설정이 저장되었습니다.")
 
-    # ─── 로그 ────────────────────────────────
-
-    def _log_w(self, msg, tag=None):
+    def _log_write(self, msg, tag=None):
         self._log.configure(state="normal")
-        self._log.insert("end", msg+"\n", tag or "info")
+        self._log.insert("end", msg + "\n", tag or "")
         self._log.see("end")
         self._log.configure(state="disabled")
 
-    def _clear(self):
+    def _clear_log(self):
         self._log.configure(state="normal")
-        self._log.delete("1.0","end")
+        self._log.delete("1.0", "end")
         self._log.configure(state="disabled")
 
-    # ─── 포스팅 ──────────────────────────────
-
     def _start(self):
-        url = self._url_e.get().strip()
+        url = self._url_entry.get().strip()
         if not url:
-            messagebox.showwarning("알림","뉴스 URL을 입력해주세요.")
+            messagebox.showwarning("알림", "뉴스 URL을 입력해주세요.")
             return
         s = load_settings()
         if not s["GROQ_API_KEY"] or not s["TISTORY_ID"]:
-            messagebox.showwarning("알림","설정 탭에서 API 키와 티스토리 정보를 입력해주세요.")
-            self._tab(1); return
-        self._btn.set_state("처리 중...", "#334466")
-        self._btn.config(cursor="")
-        self._clear()
+            messagebox.showwarning("알림", "설정 탭에서 API 키와 티스토리 정보를 먼저 입력해주세요.")
+            self._switch_tab(1)
+            return
+        self._start_btn.config(state="disabled", text="  포스팅 중...  ",
+                               bg="#b2bec3", activebackground="#b2bec3")
+        self._clear_log()
         threading.Thread(target=self._run, args=(url,), daemon=True).start()
 
     def _run(self, url):
-        log = lambda m, t=None: self.after(0, self._log_w, m, t)
+        def log(msg, tag=None):
+            self.after(0, self._log_write, msg, tag)
+
         try:
             if str(BASE_DIR) not in sys.path:
                 sys.path.insert(0, str(BASE_DIR))
@@ -312,40 +327,44 @@ class BlogApp(tk.Tk):
             from dotenv import load_dotenv
             load_dotenv(ENV_FILE, override=True)
 
-            log("━"*40)
-            log("[1/4]  뉴스 수집 중...", "info")
+            log("━" * 44, "info")
+            log("[1/4]  뉴스 내용 수집 중...", "info")
             from crawler.news_crawler import crawl_news
             news = crawl_news(url)
-            log(f"  ✓ {news['title']}", "ok")
+            log(f"  제목: {news['title']}", "ok")
 
-            log("[2/4]  AI 재작성 중...", "info")
+            log("\n[2/4]  AI가 글을 재작성 중...", "info")
             from ai_writer.content_generator import generate_post
             post = generate_post(news)
-            log(f"  ✓ 제목: {post['title']}", "ok")
+            log(f"  새 제목: {post['title']}", "ok")
+            log(f"  태그: {', '.join(post['tags'][:5])}", "ok")
 
-            log("[3/4]  이미지 검색 중...", "info")
+            log("\n[3/4]  이미지 검색 중...", "info")
             from uploader.image_fetcher import fetch_image
             kw = post["tags"][0] if post["tags"] else news["title"][:20]
             img = fetch_image(kw)
-            log(f"  ✓ {img['photographer']} on Unsplash" if img
-                else "  이미지 없음", "ok" if img else "warn")
+            if img:
+                log(f"  이미지: {img['photographer']} on Unsplash", "ok")
+            else:
+                log("  이미지를 찾지 못했습니다.", "warn")
 
-            log("[4/4]  티스토리 발행 중...", "info")
+            log("\n[4/4]  티스토리에 포스팅 중...", "info")
+            log("  브라우저가 자동으로 열립니다...", "warn")
             from uploader.tistory_uploader import upload_post
             upload_post(post, img, wait_after=False)
 
             log(f"\n  완료: {post['title']}", "ok")
-            log("━"*40)
+            log("━" * 44, "info")
             self.after(0, lambda: messagebox.showinfo(
-                "완료", f"포스팅 완료!\n\n{post['title']}"))
+                "완료", f"포스팅이 완료되었습니다!\n\n{post['title']}"))
 
         except Exception as e:
-            log(f"  오류: {e}", "err")
+            log(f"\n오류: {e}", "err")
             self.after(0, lambda: messagebox.showerror("오류", str(e)))
         finally:
-            self.after(0, lambda: (
-                self._btn.set_state("포스팅 시작", ACCENT),
-                self._btn.config(cursor="hand2")))
+            self.after(0, lambda: self._start_btn.config(
+                state="normal", text="  포스팅 시작  ",
+                bg=C["success"], activebackground=C["success_h"]))
 
 
 if __name__ == "__main__":
