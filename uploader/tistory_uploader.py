@@ -174,17 +174,46 @@ def _write_post(driver, wait, post_data, image_data):
         time.sleep(0.5)
     print("  제목 입력 완료")
 
-    # 본문 내용 준비 (이미지 HTML 포함)
+    # 본문 HTML 변환 (가독성 최적화)
+    import re as _re
+
+    def to_html(text):
+        # 단락 분리 (빈 줄 기준)
+        paragraphs = _re.split(r'\n{2,}', text.strip())
+        html = []
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            # 번호 소제목: <strong>1. 제목</strong> → <h3> 태그
+            para = _re.sub(
+                r'<strong>(\d+\..+?)</strong>',
+                r'<h3 style="font-size:18px; font-weight:bold; margin-top:30px; margin-bottom:8px; color:#1a1a1a;">\1</h3>',
+                para
+            )
+            # 단락 내 줄바꿈 → <br>
+            para = para.replace('\n', '<br>')
+            # h3 포함 단락은 p 태그 없이
+            if para.startswith('<h3'):
+                html.append(para)
+            else:
+                html.append(
+                    f'<p style="line-height:1.9; margin-bottom:18px; font-size:15px;">{para}</p>'
+                )
+        return '\n'.join(html)
+
     content = clean(post_data["body"])
+    content_html = to_html(content)
+
     if image_data:
         img_html = (
-            f'<p><img src="{image_data["url"]}" style="max-width:100%;" '
+            f'<p style="margin:25px 0; text-align:center;">'
+            f'<img src="{image_data["url"]}" style="max-width:100%; border-radius:8px;" '
             f'alt="{clean(image_data["photographer"])}"/></p>'
-            f'<p style="font-size:12px;color:#888;">사진: {clean(image_data["photographer"])} on Unsplash</p>'
+            f'<p style="font-size:12px; color:#999; text-align:center; margin-bottom:20px;">'
+            f'사진: {clean(image_data["photographer"])} on Unsplash</p>'
         )
-        content_html = content.replace("\n", "<br>") + "<br><br>" + img_html
-    else:
-        content_html = content.replace("\n", "<br>")
+        content_html = content_html + "\n" + img_html
 
     # 본문 입력 - TinyMCE setContent API 사용
     from selenium.webdriver.common.action_chains import ActionChains
