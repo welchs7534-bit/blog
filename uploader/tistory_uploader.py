@@ -24,7 +24,7 @@ def _get_chromedriver_path():
     return path
 
 
-def upload_post(post_data, image_data=None):
+def upload_post(post_data, image_data=None, wait_after=True):
     options = webdriver.ChromeOptions()
     options.add_argument("--start-maximized")
 
@@ -39,7 +39,10 @@ def upload_post(post_data, image_data=None):
         print(f"로그인 후 현재 URL: {driver.current_url}")
         _write_post(driver, wait, post_data, image_data)
         print(f"포스팅 완료: {post_data['title']}")
-        input("\n브라우저 확인 후 엔터를 누르면 종료됩니다...")
+        if wait_after:
+            input("\n브라우저 확인 후 엔터를 누르면 종료됩니다...")
+        else:
+            time.sleep(3)
     finally:
         driver.quit()
 

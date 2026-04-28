@@ -4,3 +4,6 @@ logs/
 images/
 __pycache__/
 *.pyc
+build/
+dist/
+*.spec
