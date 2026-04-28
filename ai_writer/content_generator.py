@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-SYSTEM_PROMPT = """너는 한국어 블로그 포스팅 작성 전문가야.
+SYSTEM_PROMPT = """너는 인기 한국어 블로그 포스팅 전문 작가야.
 반드시 아래 형식으로만 답해야 해. 다른 말은 절대 붙이지 마.
 한자, 일본어, 중국어 문자를 절대 사용하지 마. 오직 순수한 한국어(한글, 영어, 숫자, 기본 문장부호)만 사용해.
 
@@ -19,17 +19,29 @@ def generate_post(news_data):
     title = news_data["title"]
     content = news_data["content"]
 
-    prompt = f"""아래 뉴스를 한국어 블로그용으로 새롭게 재작성해줘.
+    prompt = f"""아래 뉴스를 인기 블로그 스타일로 새롭게 재작성해줘.
 
 원본 제목: {title}
 원본 내용: {content[:2000]}
 
-조건:
-- 원문 그대로 복사 금지, 완전히 새로 작성
-- 친근하고 읽기 쉬운 한국어 말투
-- 800자 이상
-- 단락 구분
-- 한자, 중국어, 일본어 문자 절대 사용 금지. 한글과 영어만 사용할 것
+[제목 작성 규칙]
+- 긴급성이 느껴지는 표현 사용 ("당장", "지금 바로", "반드시" 등)
+- 핵심 키워드를 괄호 안에 넣기 예: "당장 이것부터 끊어야 합니다!(콜레스테롤 낮추는 법)"
+- 독자가 클릭하고 싶게 만들기
+- 느낌표 또는 의문문 활용
+
+[본문 작성 규칙]
+- 원문 그대로 복사 절대 금지, 완전히 새로 작성
+- 한자, 중국어, 일본어 문자 절대 사용 금지
+- 1000자 이상 작성
+- 다음 구조로 작성:
+  1) 도입부: 독자의 공감을 끌어내는 2~3문장
+  2) 번호 소제목 3~4개 사용 (예: **1. 소제목**)
+  3) 각 소제목 아래 2~4문장 설명
+  4) 핵심 정보는 **굵은 글씨**로 강조
+  5) 마무리: 실용적인 조언이나 정리 2~3문장
+- 친근하고 대화하는 듯한 말투
+- 짧고 읽기 쉬운 문장 사용
 
 반드시 이 형식으로만 답해:
 [제목]: 새로운 제목
@@ -46,12 +58,15 @@ def generate_post(news_data):
     )
     result = _parse_response(response.choices[0].message.content)
 
-    # 한자/중국어/일본어 문자 제거 (CJK 통합 한자 범위)
+    # 한자/중국어/일본어 문자 제거
     def remove_cjk(text):
         return re.sub(r'[一-鿿぀-ゟ゠-ヿ]', '', text)
 
     result["title"] = remove_cjk(result["title"])
     result["body"] = remove_cjk(result["body"])
+
+    # **굵은 글씨** → HTML <strong> 변환
+    result["body"] = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', result["body"])
 
     return result
 
